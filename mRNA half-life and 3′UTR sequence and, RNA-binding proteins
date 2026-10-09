@@ -1,0 +1,740 @@
+Install All Required Packages
+# Set CRAN mirror (choose closest to you or leave as default)
+options(repos = c(CRAN = "https://cloud.r-project.org/"))
+
+# List of required packages
+required_packages <- c(
+  "readxl",     # to read Excel files
+  "ggplot2",    # for plotting
+  "factoextra", # for elbow plot
+  "dplyr",      # for data wrangling
+  "cluster"     # used internally for k-means visualization
+)
+
+# Install missing packages
+for (pkg in required_packages) {
+  if (!require(pkg, character.only = TRUE)) {
+    install.packages(pkg)
+    library(pkg, character.only = TRUE)
+  } else {
+    library(pkg, character.only = TRUE)
+  }
+}
+
+cat("All required packages are installed and loaded.\n")
+Elbow Plot for Database 1, Database 2, and Merged
+# -------- INSTALL & LOAD PACKAGES --------
+options(repos = c(CRAN = "https://cloud.r-project.org/"))
+packages <- c("readxl", "ggplot2", "factoextra", "dplyr", "gridExtra")
+for (pkg in packages) {
+  if (!require(pkg, character.only = TRUE)) {
+    install.packages(pkg)
+    library(pkg, character.only = TRUE)
+  } else {
+    library(pkg, character.only = TRUE)
+  }
+}
+
+# -------- LOAD DATA --------
+file_path <- "/Users/ahmetefekoseoglu/workplace/MASTER_GENE_HALFLIFE.xlsx"
+df <- read_excel(file_path)
+
+# Prepare data subsets based on half-life values
+db1 <- df$TANI_t_half[!is.na(df$TANI_t_half)]
+db2 <- df$HERZ_t_half[!is.na(df$HERZ_t_half)]
+merged <- df[!is.na(df$TANI_t_half) & !is.na(df$HERZ_t_half), c("TANI_t_half", "HERZ_t_half")]
+
+# -------- FUNCTION TO CREATE ELBOW PLOT --------
+make_elbow <- function(data, title) {
+  fviz_nbclust(data, kmeans, method = "wss") +
+    ggtitle(title) +
+    theme_minimal(base_size = 14) +
+    theme(
+      panel.background = element_rect(fill = "white"),
+      plot.background = element_rect(fill = "white"),
+      axis.title = element_text(face = "bold"),
+      axis.text = element_text(color = "black"),
+      plot.title = element_text(hjust = 0.5)
+    )
+}
+
+# -------- CREATE INDIVIDUAL PLOTS --------
+p1 <- make_elbow(matrix(db1, ncol = 1), "Database 1 Elbow Plot")
+p2 <- make_elbow(matrix(db2, ncol = 1), "Database 2 Elbow Plot")
+p3 <- make_elbow(merged, "Merged Database Elbow Plot")
+
+# -------- COMBINE PLOTS SIDE-BY-SIDE --------
+combined_plot <- gridExtra::grid.arrange(p1, p2, p3, ncol = 3)
+
+# -------- SAVE TO FILE with new name --------
+ggsave("/Users/ahmetefekoseoglu/workplace/Elbow_Method_Plot.png",
+       plot = combined_plot,
+       width = 18, height = 6, dpi = 300)
+
+cat("Elbow plot saved as 'Elbow_Method_Plot.png'.\n")
+One-Plot Overlay Elbow Curve
+# -------- INSTALL & LOAD PACKAGES --------
+options(repos = c(CRAN = "https://cloud.r-project.org/"))
+packages <- c("readxl", "ggplot2", "factoextra", "dplyr", "tidyr")
+for (pkg in packages) {
+  if (!require(pkg, character.only = TRUE)) {
+    install.packages(pkg)
+    library(pkg, character.only = TRUE)
+  } else {
+    library(pkg, character.only = TRUE)
+  }
+}
+
+# -------- LOAD DATA (already capped at 25h) --------
+file_path <- "/Users/ahmetefekoseoglu/workplace/MASTER_GENE_HALFLIFE.xlsx"
+df <- read_excel(file_path)
+
+# -------- PREPARE DATA SUBSETS --------
+db1 <- df$TANI_t_half[!is.na(df$TANI_t_half)]
+db2 <- df$HERZ_t_half[!is.na(df$HERZ_t_half)]
+merged <- df[!is.na(df$TANI_t_half) & !is.na(df$HERZ_t_half), c("TANI_t_half", "HERZ_t_half")]
+
+# -------- FUNCTION TO COMPUTE WSS --------
+calc_wss <- function(data) {
+  sapply(1:10, function(k) {
+    kmeans(data, centers = k, nstart = 10)$tot.withinss
+  })
+}
+
+# -------- CALCULATE WSS FOR ALL GROUPS --------
+wss_df <- data.frame(
+  k = 1:10,
+  Database1 = calc_wss(matrix(db1, ncol = 1)),
+  Database2 = calc_wss(matrix(db2, ncol = 1)),
+  Merged = calc_wss(merged)
+)
+
+# -------- CONVERT TO LONG FORMAT FOR PLOTTING --------
+wss_long <- pivot_longer(wss_df, cols = c("Database1", "Database2", "Merged"),
+                         names_to = "Database", values_to = "WSS")
+
+# -------- CREATE ELBOW PLOT WITH UPDATED COLORS --------
+elbow_plot <- ggplot(wss_long, aes(x = k, y = WSS, color = Database)) +
+  geom_line(size = 1.2) +
+  geom_point(size = 2) +
+  scale_color_manual(values = c(
+    "Database1" = "#56B4E9",  # Sky Blue
+    "Database2" = "#009E73",  # Bluish Green
+    "Merged"    = "#E69F00"   # Orange
+  )) +
+  labs(
+    title = "Elbow Plot for Database 1, Database 2, and Merged Database",
+    x = "Number of Clusters (k)",
+    y = "Total Within Sum of Squares (WSS)"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    legend.title = element_blank(),
+    legend.position = "top",
+    plot.title = element_text(hjust = 0.5, face = "bold")
+  )
+
+# -------- SAVE TO FILE --------
+output_path <- "/Users/ahmetefekoseoglu/workplace/Elbow_Method_Plot_Overlay.png"
+ggsave(output_path, plot = elbow_plot, width = 8, height = 6, dpi = 300)
+
+cat("Colorblind-friendly elbow plot saved as 'Elbow_Method_Plot_Overlay.png'\n")
+Cluster-Colored Half-Life Distributions for All Datasets
+# -------- INSTALL & LOAD PACKAGES --------
+options(repos = c(CRAN = "https://cloud.r-project.org/"))
+packages <- c("readxl", "ggplot2", "dplyr")
+for (pkg in packages) {
+  if (!require(pkg, character.only = TRUE)) {
+    install.packages(pkg)
+    library(pkg, character.only = TRUE)
+  } else {
+    library(pkg, character.only = TRUE)
+  }
+}
+
+# -------- LOAD DATA --------
+file_path <- "/Users/ahmetefekoseoglu/workplace/MASTER_GENE_HALFLIFE.xlsx"
+df <- readxl::read_excel(file_path)
+
+# -------- GLOBAL CLUSTER COLOR PALETTE --------
+global_palette <- c(
+  "Cluster 1" = "#56B4E9",  # Sky Blue
+  "Cluster 2" = "#009E73",  # Bluish Green
+  "Cluster 3" = "#E69F00",  # Orange
+  "Cluster 4" = "#CC79A7"   # Reddish Purple
+)
+
+# -------- FUNCTION TO GENERATE CLUSTER-COLORED PLOT --------
+generate_cluster_plot <- function(data_vector, k, db_name, output_path) {
+  df <- data.frame(HalfLife = data_vector)
+  set.seed(42)
+  km <- kmeans(df$HalfLife, centers = k, nstart = 25)
+  df$RawCluster <- km$cluster
+
+  # Order clusters by mean half-life
+  cluster_means <- df %>%
+    group_by(RawCluster) %>%
+    summarise(Mean = mean(HalfLife), .groups = "drop") %>%
+    arrange(Mean) %>%
+    mutate(SortedCluster = paste0("Cluster ", row_number()))
+
+  # Reassign cluster labels by sorted order
+  cluster_map <- setNames(cluster_means$SortedCluster, cluster_means$RawCluster)
+  df$Cluster <- cluster_map[as.character(df$RawCluster)]
+
+  # Compute cluster statistics for legend
+  stats <- df %>%
+    group_by(Cluster) %>%
+    summarise(
+      Mean = round(mean(HalfLife), 2),
+      Min = round(min(HalfLife), 2),
+      Max = round(max(HalfLife), 2),
+      .groups = "drop"
+    ) %>%
+    arrange(Cluster) %>%
+    mutate(Label = paste0(Cluster, "\nMean: ", Mean, "h\nMin: ", Min, "\nMax: ", Max))
+
+  # Final plot
+  p <- ggplot(df, aes(x = HalfLife, fill = Cluster)) +
+    geom_density(alpha = 0.4, color = "black") +
+    scale_fill_manual(values = global_palette, labels = stats$Label, drop = FALSE) +
+    labs(
+      title = paste("Gaussian Distribution of mRNA Half-Life (", db_name, ")", sep = ""),
+      x = "mRNA Half-Life (h)", y = "Density"
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(
+      legend.position = "bottom",
+      legend.title = element_blank(),
+      legend.text = element_text(size = 11),
+      plot.title = element_text(hjust = 0.5, face = "bold"),
+      panel.background = element_rect(fill = "white"),
+      plot.background = element_rect(fill = "white")
+    )
+
+  # Add vertical mean lines
+  for (i in 1:nrow(stats)) {
+    p <- p + geom_vline(xintercept = stats$Mean[i], color = global_palette[stats$Cluster[i]], size = 1)
+  }
+
+  # Save to file
+  ggsave(output_path, plot = p, width = 8, height = 6, dpi = 300)
+  cat(paste0("Saved: ", output_path, "\n"))
+}
+
+# -------- PREPARE VECTORS --------
+db1 <- df$TANI_t_half[!is.na(df$TANI_t_half)]
+db2 <- df$HERZ_t_half[!is.na(df$HERZ_t_half)]
+merged <- df[!is.na(df$TANI_t_half) & !is.na(df$HERZ_t_half), ]
+merged_avg <- rowMeans(merged[, c("TANI_t_half", "HERZ_t_half")])
+
+# -------- GENERATE THE 3 PLOTS --------
+generate_cluster_plot(
+  data_vector = db1,
+  k = 3,
+  db_name = "Database 1",
+  output_path = "/Users/ahmetefekoseoglu/workplace/HL_Distribution_Database1.png"
+)
+
+generate_cluster_plot(
+  data_vector = db2,
+  k = 3,
+  db_name = "Database 2",
+  output_path = "/Users/ahmetefekoseoglu/workplace/HL_Distribution_Database2.png"
+)
+
+generate_cluster_plot(
+  data_vector = merged_avg,
+  k = 4,
+  db_name = "Merged Database",
+  output_path = "/Users/ahmetefekoseoglu/workplace/HL_Distribution_MergedDatabase.png"
+)
+Gene Overlap with Adjusted Label Spacing
+# -------- INSTALL & LOAD PACKAGES --------
+options(repos = c(CRAN = "https://cloud.r-project.org/"))
+packages <- c("readxl", "ggplot2", "dplyr")
+for (pkg in packages) {
+  if (!require(pkg, character.only = TRUE)) {
+    install.packages(pkg)
+    library(pkg, character.only = TRUE)
+  } else {
+    library(pkg, character.only = TRUE)
+  }
+}
+
+# -------- LOAD DATA --------
+file_path <- "/Users/ahmetefekoseoglu/workplace/MASTER_GENE_HALFLIFE.xlsx"
+df <- readxl::read_excel(file_path)
+
+# -------- CLEAN GENE SETS --------
+df_db1 <- df %>% filter(!is.na(TANI_t_half)) %>% select(Ensembl_ID)
+df_db2 <- df %>% filter(!is.na(HERZ_t_half)) %>% select(Ensembl_ID)
+
+genes_db1 <- unique(df_db1$Ensembl_ID)
+genes_db2 <- unique(df_db2$Ensembl_ID)
+
+only_db1 <- setdiff(genes_db1, genes_db2)
+only_db2 <- setdiff(genes_db2, genes_db1)
+shared_genes <- intersect(genes_db1, genes_db2)
+merged_genes <- union(genes_db1, genes_db2)
+
+# -------- CREATE COUNT TABLE --------
+bar_data <- data.frame(
+  Category = factor(c("Only in Database 1", "Only in Database 2", "Shared Genes", "Merged Database"),
+                    levels = c("Only in Database 1", "Only in Database 2", "Shared Genes", "Merged Database")),
+  Count = c(length(only_db1), length(only_db2), length(shared_genes), length(merged_genes))
+)
+
+# -------- COLOR PALETTE --------
+bar_colors <- c(
+  "Only in Database 1" = "#56B4E9",  # Sky Blue
+  "Only in Database 2" = "#009E73",  # Bluish Green
+  "Shared Genes" = "#CC79A7",        # Reddish Purple
+  "Merged Database" = "#E69F00"      # Orange
+)
+
+# -------- PLOT --------
+p <- ggplot(bar_data, aes(x = Category, y = Count, fill = Category)) +
+  geom_bar(stat = "identity", width = 0.6) +
+  geom_text(aes(label = Count), vjust = -0.6, size = 5) +
+  scale_fill_manual(values = bar_colors) +
+  labs(
+    title = "Comparison of Gene Presence Across Databases",
+    x = NULL,
+    y = "Number of Genes (with Half-Life Data)"
+  ) +
+  ylim(0, max(bar_data$Count) * 1.1) +  # Add headroom above tallest bar
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle = 15, hjust = 1),
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white")
+  )
+
+# -------- SAVE TO FILE --------
+ggsave("/Users/ahmetefekoseoglu/workplace/Gene_Overlap_Comparison.png", plot = p, width = 8, height = 6, dpi = 300)
+
+cat("Plot saved: 'Gene_Overlap_Comparison.png'\n")
+Separate regressions of 5’-UTR GC% by half-life and 5’-UTR length by half-life
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+
+# Define file path
+file_path <- "/Users/Ahmet/Desktop/human_mRNA_dataset.csv"
+
+# Load dataset
+data <- read.csv(file_path, header = TRUE, stringsAsFactors = FALSE)
+
+# Ensure required columns exist
+if (!all(c("X5.UTR.length", "GC.content.5.UTR....", "Half_life_h") %in% colnames(data))) {
+  stop("Dataset must contain the columns: 'X5.UTR.length', 'GC.content.5.UTR....', and 'Half_life_h'")
+}
+
+# Convert Half-Life to numeric
+data$Half_life_h <- as.numeric(data$Half_life_h)
+
+# ---- Exclude Cluster 4b and Half-Life values ≥ 25 hours ----
+data <- data %>%
+  filter(Half_life_h < 25)  # Keep only Half-Life < 25 hours
+
+if ("Cluster" %in% colnames(data)) {
+  data <- data[data$Cluster != "4b", ]  # Remove Cluster 4b
+}
+
+# Remove NaN, Inf values
+data <- data[is.finite(data$GC.content.5.UTR....) & is.finite(data$X5.UTR.length), ]
+
+# ---- PLOT 1: GC Content (%) vs. Half-Life with Regression ----
+gc_content_plot <- ggplot(data, aes(x = Half_life_h, y = GC.content.5.UTR....)) +
+  geom_point(alpha = 0.6, size = 1.5, color = "#1f78b4") +  # Scatter plot
+  geom_smooth(method = "lm", se = TRUE, color = "black", linetype = "solid") +  # Regression line
+  labs(
+    title = "Regression: GC Content (%) vs. Half-Life (< 25h)",
+    x = "Half-Life (hours)",
+    y = "GC Content (%)"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA),
+    legend.position = "none"
+  )
+
+# Save GC content regression plot
+gc_content_plot_path <- "/Users/Ahmet/Desktop/5UTR_GC_Content_Regression.png"
+ggsave(gc_content_plot_path, gc_content_plot, width = 10, height = 6, dpi = 300)
+cat("GC Content Regression Plot saved to:", gc_content_plot_path, "\n")
+
+
+# ---- PLOT 2: 5'-UTR Length vs. Half-Life with Regression ----
+utr_length_plot <- ggplot(data, aes(x = Half_life_h, y = X5.UTR.length)) +
+  geom_point(alpha = 0.6, size = 1.5, color = "#e31a1c") +  # Scatter plot
+  geom_smooth(method = "lm", se = TRUE, color = "black", linetype = "solid") +  # Regression line
+  labs(
+    title = "Regression: 5'-UTR Length vs. Half-Life (< 25h)",
+    x = "Half-Life (hours)",
+    y = "5'-UTR Length (nt)"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA),
+    legend.position = "none"
+  )
+
+# Save 5'-UTR Length regression plot
+utr_length_plot_path <- "/Users/Ahmet/Desktop/5UTR_Length_Regression.png"
+ggsave(utr_length_plot_path, utr_length_plot, width = 10, height = 6, dpi = 300)
+cat("5'-UTR Length Regression Plot saved to:", utr_length_plot_path, "\n")
+
+Combined regressions of 5’-UTR GC% by half-life and 5’-UTR length by half-life, excluding 4b
+
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+
+# Define file path
+file_path <- "/Users/Ahmet/Desktop/human_mRNA_dataset.csv"
+
+# Load dataset
+data <- read.csv(file_path, header = TRUE, stringsAsFactors = FALSE)
+
+# Ensure required columns exist
+if (!all(c("X5.UTR.length", "GC.content.5.UTR....", "Half_life_h") %in% colnames(data))) {
+  stop("Dataset must contain the columns: 'X5.UTR.length', 'GC.content.5.UTR....', and 'Half_life_h'")
+}
+
+# Convert Half-Life to numeric
+data$Half_life_h <- as.numeric(data$Half_life_h)
+
+# ---- Exclude Cluster 4b and Half-Life values ≥ 25 hours ----
+data <- data %>%
+  filter(Half_life_h < 25)  # Keep only Half-Life < 25 hours
+
+if ("Cluster" %in% colnames(data)) {
+  data <- data[data$Cluster != "4b", ]  # Remove Cluster 4b
+}
+
+# Remove NaN, Inf values
+data <- data[is.finite(data$GC.content.5.UTR....) & is.finite(data$X5.UTR.length), ]
+
+# ---- Calculate R² values ----
+gc_lm <- lm(GC.content.5.UTR.... ~ Half_life_h, data = data)
+utr_lm <- lm(X5.UTR.length ~ Half_life_h, data = data)
+
+gc_r2 <- round(summary(gc_lm)$r.squared, 3)
+utr_r2 <- round(summary(utr_lm)$r.squared, 3)
+
+# ---- PLOT: Overlapping GC Content & 5'-UTR Length Regression ----
+combined_plot <- ggplot(data, aes(x = Half_life_h)) +
+  # Scatter points for GC Content (Left Axis)
+  geom_point(aes(y = GC.content.5.UTR....), color = "#1f78b4", alpha = 0.6, size = 1.5) +
+  geom_smooth(aes(y = GC.content.5.UTR....), method = "lm", color = "black", se = TRUE, linetype = "solid") +
+  
+  # Scatter points for 5'-UTR Length (Right Axis, scaled)
+  geom_point(aes(y = X5.UTR.length / max(X5.UTR.length) * max(data$GC.content.5.UTR....)), 
+             color = "#e31a1c", alpha = 0.6, size = 1.5) +  
+  geom_smooth(aes(y = X5.UTR.length / max(X5.UTR.length) * max(data$GC.content.5.UTR....)), 
+              method = "lm", color = "black", se = TRUE, linetype = "solid") +
+  
+  # Labels
+  labs(
+    title = "Regression: 5'-UTR GC% & Length vs. Half-Life (< 25h)",
+    x = "Half-Life (hours)",
+    y = "5'-UTR GC Content (%)"
+  ) +
+  
+  # Secondary y-axis for 5'-UTR Length
+  scale_y_continuous(
+    sec.axis = sec_axis(~ . * max(data$X5.UTR.length) / max(data$GC.content.5.UTR....), 
+                        name = "5'-UTR Length (nt)")
+  ) +
+  
+  # Display R² values LOWER for better readability
+  annotate("text", x = max(data$Half_life_h) * 0.7, 
+           y = max(data$GC.content.5.UTR....) * 0.5,  # Moved down
+           label = paste0("GC% R² = ", gc_r2), 
+           color = "black", fontface = "bold", size = 6) +
+  
+  annotate("text", x = max(data$Half_life_h) * 0.7, 
+           y = max(data$GC.content.5.UTR....) * 0.3,  # Moved further down
+           label = paste0("UTR Length R² = ", utr_r2), 
+           color = "black", fontface = "bold", size = 6) +
+  
+  # Theme for white background
+  theme_minimal(base_size = 14) +
+  theme(
+    panel.background = element_rect(fill = "white", color = "white"),
+    plot.background = element_rect(fill = "white", color = "white"),
+    legend.position = "none",
+    axis.text.y.right = element_text(color = "black"),  # Right axis text in black
+    axis.text.y.left = element_text(color = "black")  # Left axis text in black
+  )
+
+# Save overlapping regression plot
+combined_plot_path <- "/Users/Ahmet/Desktop/5UTR_Combined_Regression.png"
+ggsave(combined_plot_path, combined_plot, width = 10, height = 6, dpi = 300)
+cat("Combined Regression Plot saved to:", combined_plot_path, "\n")
+
+Combined regressions of 5’-UTR GC% by half-life and 5’-UTR length by half-life, including 4b
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+
+# Define file path
+file_path <- "/Users/Ahmet/Desktop/human_mRNA_dataset.csv"
+
+# Load dataset
+data <- read.csv(file_path, header = TRUE, stringsAsFactors = FALSE)
+
+# Ensure required columns exist
+if (!all(c("X5.UTR.length", "GC.content.5.UTR....", "Half_life_h") %in% colnames(data))) {
+  stop("Dataset must contain the columns: 'X5.UTR.length', 'GC.content.5.UTR....', and 'Half_life_h'")
+}
+
+# Convert Half-Life to numeric
+data$Half_life_h <- as.numeric(data$Half_life_h)
+
+# ---- Keep ALL Half-Life values, including 25h ----
+# (Do not filter out Half-Life values >= 25)
+# Keep Cluster 4b in the dataset
+
+# Remove NaN, Inf values
+data <- data[is.finite(data$GC.content.5.UTR....) & is.finite(data$X5.UTR.length), ]
+
+# ---- Calculate R² values ----
+gc_lm <- lm(GC.content.5.UTR.... ~ Half_life_h, data = data)
+utr_lm <- lm(X5.UTR.length ~ Half_life_h, data = data)
+
+gc_r2 <- round(summary(gc_lm)$r.squared, 3)
+utr_r2 <- round(summary(utr_lm)$r.squared, 3)
+
+# ---- PLOT: Overlapping GC Content & 5'-UTR Length Regression ----
+combined_plot <- ggplot(data, aes(x = Half_life_h)) +
+  # Scatter points for GC Content (Left Axis)
+  geom_point(aes(y = GC.content.5.UTR....), color = "#1f78b4", alpha = 0.6, size = 1.5) +
+  geom_smooth(aes(y = GC.content.5.UTR....), method = "lm", color = "black", se = TRUE, linetype = "solid") +
+  
+  # Scatter points for 5'-UTR Length (Right Axis, scaled)
+  geom_point(aes(y = X5.UTR.length / max(X5.UTR.length) * max(data$GC.content.5.UTR....)), 
+             color = "#e31a1c", alpha = 0.6, size = 1.5) +  
+  geom_smooth(aes(y = X5.UTR.length / max(X5.UTR.length) * max(data$GC.content.5.UTR....)), 
+              method = "lm", color = "black", se = TRUE, linetype = "solid") +
+  
+  # Labels
+  labs(
+    title = "Regression: 5'-UTR GC% & Length vs. Half-Life (Including 25h)",
+    x = "Half-Life (hours)",
+    y = "5'-UTR GC Content (%)"
+  ) +
+  
+  # Secondary y-axis for 5'-UTR Length
+  scale_y_continuous(
+    sec.axis = sec_axis(~ . * max(data$X5.UTR.length) / max(data$GC.content.5.UTR....), 
+                        name = "5'-UTR Length (nt)")
+  ) +
+  
+  # Display R² values LOWER for better readability
+  annotate("text", x = max(data$Half_life_h) * 0.7, 
+           y = max(data$GC.content.5.UTR....) * 0.5,  # Moved down
+           label = paste0("GC% R² = ", gc_r2), 
+           color = "black", fontface = "bold", size = 6) +
+  
+  annotate("text", x = max(data$Half_life_h) * 0.7, 
+           y = max(data$GC.content.5.UTR....) * 0.3,  # Moved further down
+           label = paste0("UTR Length R² = ", utr_r2), 
+           color = "black", fontface = "bold", size = 6) +
+  
+  # Theme for white background
+  theme_minimal(base_size = 14) +
+  theme(
+    panel.background = element_rect(fill = "white", color = "white"),
+    plot.background = element_rect(fill = "white", color = "white"),
+    legend.position = "none",
+    axis.text.y.right = element_text(color = "black"),  # Right axis text in black
+    axis.text.y.left = element_text(color = "black")  # Left axis text in black
+  )
+
+# Save overlapping regression plot
+combined_plot_path <- "/Users/Ahmet/Desktop/5UTR_Combined_Regression_Including_25h.png"
+ggsave(combined_plot_path, combined_plot, width = 10, height = 6, dpi = 300)
+cat("Combined Regression Plot (Including 25h) saved to:", combined_plot_path, "\n")
+
+Combined regressions of 3’-UTR GC% by half-life and 3’-UTR length by half-life, excluding 4b
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+
+# Define file path
+file_path <- "/Users/Ahmet/Desktop/human_mRNA_dataset.csv"
+
+# Load dataset
+data <- read.csv(file_path, header = TRUE, stringsAsFactors = FALSE)
+
+# Ensure required columns exist
+if (!all(c("X3.UTR.length", "GC.content.3.UTR....", "Half_life_h") %in% colnames(data))) {
+  stop("Dataset must contain the columns: 'X3.UTR.length', 'GC.content.3.UTR....', and 'Half_life_h'")
+}
+
+# Convert Half-Life to numeric
+data$Half_life_h <- as.numeric(data$Half_life_h)
+
+# ---- Exclude Cluster 4b and Half-Life values ≥ 25 hours ----
+data <- data %>%
+  filter(Half_life_h < 25)  # Keep only Half-Life < 25 hours
+
+if ("Cluster" %in% colnames(data)) {
+  data <- data[data$Cluster != "4b", ]  # Remove Cluster 4b
+}
+
+# Remove NaN, Inf values
+data <- data[is.finite(data$GC.content.3.UTR....) & is.finite(data$X3.UTR.length), ]
+
+# ---- Calculate R² values ----
+gc_lm <- lm(GC.content.3.UTR.... ~ Half_life_h, data = data)
+utr_lm <- lm(X3.UTR.length ~ Half_life_h, data = data)
+
+gc_r2 <- round(summary(gc_lm)$r.squared, 3)
+utr_r2 <- round(summary(utr_lm)$r.squared, 3)
+
+# ---- PLOT: Overlapping GC Content & 3'-UTR Length Regression ----
+combined_plot <- ggplot(data, aes(x = Half_life_h)) +
+  # Scatter points for GC Content (Left Axis)
+  geom_point(aes(y = GC.content.3.UTR....), color = "#1f78b4", alpha = 0.6, size = 1.5) +
+  geom_smooth(aes(y = GC.content.3.UTR....), method = "lm", color = "black", se = TRUE, linetype = "solid") +
+  
+  # Scatter points for 3'-UTR Length (Right Axis, scaled)
+  geom_point(aes(y = X3.UTR.length / max(X3.UTR.length) * max(data$GC.content.3.UTR....)), 
+             color = "#e31a1c", alpha = 0.6, size = 1.5) +  
+  geom_smooth(aes(y = X3.UTR.length / max(X3.UTR.length) * max(data$GC.content.3.UTR....)), 
+              method = "lm", color = "black", se = TRUE, linetype = "solid") +
+  
+  # Labels
+  labs(
+    title = "Regression: 3'-UTR GC% & Length vs. Half-Life (< 25h)",
+    x = "Half-Life (hours)",
+    y = "3'-UTR GC Content (%)"
+  ) +
+  
+  # Secondary y-axis for 3'-UTR Length
+  scale_y_continuous(
+    sec.axis = sec_axis(~ . * max(data$X3.UTR.length) / max(data$GC.content.3.UTR....), 
+                        name = "3'-UTR Length (nt)")
+  ) +
+  
+  # Display R² values LOWER for better readability
+  annotate("text", x = max(data$Half_life_h) * 0.7, 
+           y = max(data$GC.content.3.UTR....) * 0.5,  # Moved down
+           label = paste0("GC% R² = ", gc_r2), 
+           color = "black", fontface = "bold", size = 6) +
+  
+  annotate("text", x = max(data$Half_life_h) * 0.7, 
+           y = max(data$GC.content.3.UTR....) * 0.3,  # Moved further down
+           label = paste0("UTR Length R² = ", utr_r2), 
+           color = "black", fontface = "bold", size = 6) +
+  
+  # Theme for white background
+  theme_minimal(base_size = 14) +
+  theme(
+    panel.background = element_rect(fill = "white", color = "white"),
+    plot.background = element_rect(fill = "white", color = "white"),
+    legend.position = "none",
+    axis.text.y.right = element_text(color = "black"),  # Right axis text in black
+    axis.text.y.left = element_text(color = "black")  # Left axis text in black
+  )
+
+# Save overlapping regression plot
+combined_plot_path <- "/Users/Ahmet/Desktop/3UTR_Combined_Regression.png"
+ggsave(combined_plot_path, combined_plot, width = 10, height = 6, dpi = 300)
+cat("Combined Regression Plot saved to:", combined_plot_path, "\n")
+
+Combined regressions of 3’-UTR GC% by half-life and 3’-UTR length by half-life, including 4b
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+
+# Define file path
+file_path <- "/Users/Ahmet/Desktop/human_mRNA_dataset.csv"
+
+# Load dataset
+data <- read.csv(file_path, header = TRUE, stringsAsFactors = FALSE)
+
+# Ensure required columns exist
+if (!all(c("X3.UTR.length", "GC.content.3.UTR....", "Half_life_h") %in% colnames(data))) {
+  stop("Dataset must contain the columns: 'X3.UTR.length', 'GC.content.3.UTR....', and 'Half_life_h'")
+}
+
+# Convert Half-Life to numeric
+data$Half_life_h <- as.numeric(data$Half_life_h)
+
+# ---- Keep ALL Half-Life values, including 25h ----
+# (Do not filter out Half-Life values >= 25)
+# Keep Cluster 4b in the dataset
+
+# Remove NaN, Inf values
+data <- data[is.finite(data$GC.content.3.UTR....) & is.finite(data$X3.UTR.length), ]
+
+# ---- Calculate R² values ----
+gc_lm <- lm(GC.content.3.UTR.... ~ Half_life_h, data = data)
+utr_lm <- lm(X3.UTR.length ~ Half_life_h, data = data)
+
+gc_r2 <- round(summary(gc_lm)$r.squared, 3)
+utr_r2 <- round(summary(utr_lm)$r.squared, 3)
+
+# ---- PLOT: Overlapping GC Content & 3'-UTR Length Regression ----
+combined_plot <- ggplot(data, aes(x = Half_life_h)) +
+  # Scatter points for GC Content (Left Axis)
+  geom_point(aes(y = GC.content.3.UTR....), color = "#1f78b4", alpha = 0.6, size = 1.5) +
+  geom_smooth(aes(y = GC.content.3.UTR....), method = "lm", color = "black", se = TRUE, linetype = "solid") +
+  
+  # Scatter points for 3'-UTR Length (Right Axis, scaled)
+  geom_point(aes(y = X3.UTR.length / max(X3.UTR.length) * max(data$GC.content.3.UTR....)), 
+             color = "#e31a1c", alpha = 0.6, size = 1.5) +  
+  geom_smooth(aes(y = X3.UTR.length / max(X3.UTR.length) * max(data$GC.content.3.UTR....)), 
+              method = "lm", color = "black", se = TRUE, linetype = "solid") +
+  
+  # Labels
+  labs(
+    title = "Regression: 3'-UTR GC% & Length vs. Half-Life (Including 25h)",
+    x = "Half-Life (hours)",
+    y = "3'-UTR GC Content (%)"
+  ) +
+  
+  # Secondary y-axis for 3'-UTR Length
+  scale_y_continuous(
+    sec.axis = sec_axis(~ . * max(data$X3.UTR.length) / max(data$GC.content.3.UTR....), 
+                        name = "3'-UTR Length (nt)")
+  ) +
+  
+  # Display R² values LOWER for better readability
+  annotate("text", x = max(data$Half_life_h) * 0.7, 
+           y = max(data$GC.content.3.UTR....) * 0.5,  # Moved down
+           label = paste0("GC% R² = ", gc_r2), 
+           color = "black", fontface = "bold", size = 6) +
+  
+  annotate("text", x = max(data$Half_life_h) * 0.7, 
+           y = max(data$GC.content.3.UTR....) * 0.3,  # Moved further down
+           label = paste0("UTR Length R² = ", utr_r2), 
+           color = "black", fontface = "bold", size = 6) +
+  
+  # Theme for white background
+  theme_minimal(base_size = 14) +
+  theme(
+    panel.background = element_rect(fill = "white", color = "white"),
+    plot.background = element_rect(fill = "white", color = "white"),
+    legend.position = "none",
+    axis.text.y.right = element_text(color = "black"),  # Right axis text in black
+    axis.text.y.left = element_text(color = "black")  # Left axis text in black
+  )
+
+# Save overlapping regression plot
+combined_plot_path <- "/Users/Ahmet/Desktop/3UTR_Combined_Regression_Including_25h.png"
+ggsave(combined_plot_path, combined_plot, width = 10, height = 6, dpi = 300)
+cat("Combined Regression Plot (Including 25h) saved to:", combined_plot_path, "\n")
+
+
